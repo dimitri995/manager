@@ -7,7 +7,10 @@ import {
 } from '@/common/utils/test.provider';
 import { useParams } from 'react-router-dom';
 import ContactEdit from './contactEdit';
-import { useGetDomainContact } from '@/domain/hooks/data/query';
+import {
+  useGetDomainContact,
+  useGetDomainResource,
+} from '@/domain/hooks/data/query';
 import {
   useGetConfigurationRule,
   useUpdateContactMutation,
@@ -16,6 +19,7 @@ import { TConfigurationRuleField } from '@/domain/types/contactEdit';
 
 vi.mock('@/domain/hooks/data/query', () => ({
   useGetDomainContact: vi.fn(),
+  useGetDomainResource: vi.fn(),
 }));
 
 vi.mock('@/domain/hooks/domainTabs/useContactEdit', () => ({
@@ -79,6 +83,15 @@ const mockRules = {
   },
 };
 
+// domainResourceWithHolder is the domain resource whose current holder is holderId.
+const domainResourceWithHolder = (holderId: string) => ({
+  domainResource: {
+    currentState: { contactsConfiguration: { contactOwner: { id: holderId } } },
+  },
+  isFetchingDomainResource: false,
+  domainResourceError: null,
+});
+
 const mockDomainContact = {
   id: 'contact-123',
   firstName: 'John',
@@ -104,6 +117,9 @@ describe('ContactEdit Page', () => {
       domainContact: mockDomainContact,
       isFetchingDomainContact: false,
     });
+    (useGetDomainResource as Mock).mockReturnValue(
+      domainResourceWithHolder('contact-123'),
+    );
     (useGetConfigurationRule as Mock).mockReturnValue({
       rules: mockRules,
       isRulesLoading: false,
@@ -248,6 +264,98 @@ describe('ContactEdit Page', () => {
       expect(useUpdateContactMutation).toHaveBeenCalledWith(
         'contact-123',
         'example.com',
+        'update',
+      );
+    });
+  });
+
+  describe('rule action', () => {
+    it('should use the trade rules for the new holder of a pending trade', () => {
+      // The correction link of an ongoing DomainTrade opens the page with the new holder,
+      // while the domain still belongs to the old one.
+      (useGetDomainResource as Mock).mockReturnValue(
+        domainResourceWithHolder('old-holder-456'),
+      );
+
+      render(<ContactEdit />);
+
+      expect(useGetConfigurationRule).toHaveBeenLastCalledWith(
+        'trade',
+        'example.com',
+        { enabled: true },
+      );
+      expect(useUpdateContactMutation).toHaveBeenLastCalledWith(
+        'contact-123',
+        'example.com',
+        'trade',
+      );
+    });
+
+    it('should use the update rules for the current holder written with a contact/ prefix', () => {
+      (useGetDomainResource as Mock).mockReturnValue(
+        domainResourceWithHolder('contact/contact-123'),
+      );
+
+      render(<ContactEdit />);
+
+      expect(useGetConfigurationRule).toHaveBeenLastCalledWith(
+        'update',
+        'example.com',
+        { enabled: true },
+      );
+    });
+
+    it('should wait for the domain holder before loading the rules', () => {
+      (useGetDomainResource as Mock).mockReturnValue({
+        domainResource: undefined,
+        isFetchingDomainResource: true,
+        domainResourceError: null,
+      });
+
+      render(<ContactEdit />);
+
+      expect(screen.getByRole('progressbar')).toBeInTheDocument();
+      expect(useGetConfigurationRule).toHaveBeenLastCalledWith(
+        'update',
+        'example.com',
+        { enabled: false },
+      );
+    });
+
+    it('should keep the update rules when the domain has no holder id', () => {
+      (useGetDomainResource as Mock).mockReturnValue({
+        domainResource: { currentState: { contactsConfiguration: {} } },
+        isFetchingDomainResource: false,
+        domainResourceError: null,
+      });
+
+      render(<ContactEdit />);
+
+      expect(useGetConfigurationRule).toHaveBeenLastCalledWith(
+        'update',
+        'example.com',
+        { enabled: true },
+      );
+    });
+
+    it('should keep the update rules when the domain holder cannot be read', () => {
+      (useGetDomainResource as Mock).mockReturnValue({
+        domainResource: undefined,
+        isFetchingDomainResource: false,
+        domainResourceError: new Error('domain resource unavailable'),
+      });
+
+      render(<ContactEdit />);
+
+      expect(useGetConfigurationRule).toHaveBeenLastCalledWith(
+        'update',
+        'example.com',
+        { enabled: true },
+      );
+      expect(useUpdateContactMutation).toHaveBeenLastCalledWith(
+        'contact-123',
+        'example.com',
+        'update',
       );
     });
   });

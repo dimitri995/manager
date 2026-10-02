@@ -43,18 +43,24 @@ export const useGetConfigurationRule = (
   };
 };
 
+/**
+ * Updates a contact after checking it against the rules of the domain for
+ * action: update for the current holder of the domain, trade for the new
+ * holder of a pending trade (see contactEdit).
+ */
 export const useUpdateContactMutation = (
   holderId: string,
   serviceName: string,
+  action: string = CONFIGURATION_RULE_ACTIONS.UPDATE,
 ) => {
   const { mutate, isPending, error } = useMutation<
     TDomainContact,
     Error,
     Partial<TDomainContact>
   >({
-    mutationKey: ['domain', 'contact', 'update', holderId],
+    mutationKey: ['domain', 'contact', 'update', holderId, action],
     mutationFn: async (body: Partial<TDomainContact>) => {
-      await postDomainConfigurationRuleCheck(CONFIGURATION_RULE_ACTIONS.UPDATE, serviceName, {
+      await postDomainConfigurationRuleCheck(action, serviceName, {
         owner: body,
       });
       return putDomainContact(holderId, body);

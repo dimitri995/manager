@@ -21,7 +21,10 @@ import {
   CARD_COLOR
 } from '@ovhcloud/ods-react';
 import { AxiosError } from 'axios';
-import { useGetDomainContact } from '@/domain/hooks/data/query';
+import {
+  useGetDomainContact,
+  useGetDomainResource,
+} from '@/domain/hooks/data/query';
 import {
   useGetConfigurationRule,
   useUpdateContactMutation,
@@ -65,6 +68,11 @@ function getRulesBySection(
   return rules.fields.and.filter((rule) => !fields.has(rule.label));
 }
 
+/** normalizeContactId drops the "contact/" prefix an id may carry. */
+function normalizeContactId(id?: string): string {
+  return String(id ?? '').replace(/^contact\//, '');
+}
+
 export default function ContactEdit() {
   const { t } = useTranslation(['domain', NAMESPACES.ACTIONS]);
   const { serviceName, holderId } = useParams<{
@@ -87,14 +95,30 @@ export default function ContactEdit() {
     holderId,
     { enabled: !!holderId },
   );
-  const { rules, isRulesLoading } = useGetConfigurationRule(
-    CONFIGURATION_RULE_ACTIONS.UPDATE,
+  const { domainResource, isFetchingDomainResource } = useGetDomainResource(
     serviceName,
-    { enabled: !!serviceName },
+  );
+  const currentHolderId =
+    domainResource?.currentState?.contactsConfiguration?.contactOwner?.id;
+  let ruleAction: string | undefined;
+  if (currentHolderId) {
+    ruleAction =
+      normalizeContactId(currentHolderId) === normalizeContactId(holderId)
+        ? CONFIGURATION_RULE_ACTIONS.UPDATE
+        : CONFIGURATION_RULE_ACTIONS.TRADE;
+  } else if (!isFetchingDomainResource) {
+    // Holder unknown (resource in error or without owner): keep the update rules, as before.
+    ruleAction = CONFIGURATION_RULE_ACTIONS.UPDATE;
+  }
+  const { rules, isRulesLoading } = useGetConfigurationRule(
+    ruleAction ?? CONFIGURATION_RULE_ACTIONS.UPDATE,
+    serviceName,
+    { enabled: !!serviceName && !!ruleAction },
   );
   const { updateContact, isUpdateContactPending } = useUpdateContactMutation(
     holderId,
     serviceName,
+    ruleAction,
   );
 
   // Form state
@@ -236,7 +260,7 @@ export default function ContactEdit() {
     navigate(backUrl);
   }, [backUrl]);
 
-  if (isFetchingDomainContact || isRulesLoading) {
+  if (isFetchingDomainContact || isFetchingDomainResource || isRulesLoading) {
     return (
       <div className="flex justify-center py-8">
         <Spinner size={SPINNER_SIZE.md} />

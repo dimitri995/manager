@@ -119,6 +119,7 @@ export const OWNER_CONTACT_LABEL = 'OWNER_CONTACT';
 
 export const CONFIGURATION_RULE_ACTIONS = {
   UPDATE: 'update',
+  TRADE: 'trade',
 } as const;
 
 export const DATE_FORMAT_PLACEHOLDER = 'YYYY-MM-DD';
